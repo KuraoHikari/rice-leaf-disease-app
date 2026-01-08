@@ -14,6 +14,12 @@
 - **Platform Aplikasi**: Web Application (Next.js 16.1.1 + React 19.2.3)
 - **Bahasa & Framework**: Python, TensorFlow/Keras, TypeScript, Next.js
 
+### 🔗 Links
+
+- **GitHub Repository**: [https://github.com/kuraohikari/rice-leaf-disease-app](https://github.com/kuraohikari/rice-leaf-disease-app)
+- **Dataset Kaggle**: [https://www.kaggle.com/datasets/vbookshelf/rice-leaf-diseases](https://www.kaggle.com/datasets/vbookshelf/rice-leaf-diseases)
+- **Live Demo**: [Coming Soon]
+
 ---
 
 ## 🎯 1. Deskripsi Sistem
@@ -44,7 +50,13 @@ Namun, diagnosis manual memiliki beberapa keterbatasan:
 
 ---
 
-## 🔄 2. Alur Kerja Aplikasi
+## 📸 2. Screenshots Aplikasi
+
+Dokumentasi visual aplikasi menampilkan antarmuka pengguna dan flow deteksi penyakit daun padi. Screenshots tersedia di folder `/screenshots`.
+
+---
+
+## 🔄 3. Alur Kerja Aplikasi
 
 ### Tahapan Sistem dari Input hingga Output
 
@@ -98,7 +110,7 @@ Namun, diagnosis manual memiliki beberapa keterbatasan:
 
 ---
 
-## 💻 3. Contoh Penggunaan
+## 💻 4. Contoh Penggunaan
 
 ### Menjalankan Aplikasi
 
@@ -169,7 +181,7 @@ npm start
 
 ---
 
-## 🧪 4. Proses Pengembangan Machine Learning
+## 🧪 5. Proses Pengembangan Machine Learning
 
 ### 4.1 Pemahaman Masalah
 
@@ -372,7 +384,186 @@ Model telah diintegrasikan ke aplikasi web dan diuji dengan:
 
 ---
 
-## ⚠️ 6. Kendala yang Dihadapi
+## ⚙️ 6. Versi TensorFlow dan Kompatibilitas Browser
+
+### Mengapa Versi Spesifik Sangat Penting?
+
+Proyek ini **WAJIB** menggunakan **TensorFlow 2.16.2** dan **TensorFlow.js 4.22.0**. Penggunaan versi yang salah akan menyebabkan error fatal saat model dijalankan di browser.
+
+#### 1. **Kompatibilitas Format Model**
+
+**Masalah yang Terjadi dengan Versi Berbeda**:
+
+```
+Error: Layer "input_layer" does not have an "inbound_nodes" property
+```
+
+Keras 3 (TensorFlow 2.15+) mengubah struktur internal model JSON:
+
+- **Keras 2 (Legacy)**: Menggunakan `inbound_nodes` untuk menghubungkan layer
+- **Keras 3**: Menggunakan struktur baru yang tidak kompatibel dengan TensorFlow.js
+
+**Solusi**:
+
+- TensorFlow 2.16.2 mendukung **Legacy H5 format** yang compatible dengan TensorFlow.js
+- Save model dengan: `model.save(path, save_format='h5')`
+- Konversi ke TFJS dengan: `tensorflowjs_converter --input_format keras`
+
+#### 2. **Browser Runtime Compatibility**
+
+TensorFlow.js 4.22.0 mencakup:
+
+- ✅ Fix untuk loading Keras models di browser
+- ✅ Proper handling untuk layer connections
+- ✅ WebGL backend optimization
+- ✅ Support untuk berbagai arsitektur CNN
+
+**Versi yang Lebih Baru Tidak Selalu Lebih Baik**:
+
+- TensorFlow.js 4.23+ mungkin memiliki breaking changes
+- Compatibility dengan browser older versions bisa berkurang
+- Weight loading mechanism bisa berubah
+
+#### 3. **Weight Loading dan Inference**
+
+**Proses Loading Model di Browser**:
+
+```typescript
+// Load model from public directory
+const model = await tf.loadLayersModel("/web_model/model.json");
+
+// Preprocessing: Resize to 224×224 and normalize [0,1]
+const tensor = tf.browser
+  .fromPixels(imageElement)
+  .resizeBilinear([224, 224])
+  .toFloat()
+  .div(255.0)
+  .expandDims(0);
+
+// Inference
+const prediction = model.predict(tensor) as tf.Tensor;
+const probabilities = await prediction.data();
+```
+
+**Mengapa Ini Penting**:
+
+- Model harus memiliki `batch_input_shape` yang eksplisit: `[null, 224, 224, 3]`
+- Normalisasi harus konsisten: Training (÷255) = Inference (÷255)
+- Layer names harus match antara Python dan JavaScript
+
+#### 4. **Conversion Pipeline**
+
+**Step-by-Step Conversion**:
+
+```bash
+# 1. Train model dengan TensorFlow 2.16.2
+pip install tensorflow==2.16.2
+
+# 2. Save dalam Legacy H5 format
+model.save('model.h5', save_format='h5')
+
+# 3. Install TensorFlow.js converter
+pip install tensorflowjs==4.22.0
+
+# 4. Convert ke TFJS format
+tensorflowjs_converter \
+  --input_format=keras \
+  --output_format=tfjs_layers_model \
+  model.h5 \
+  web_model/
+
+# Output:
+# web_model/
+#   ├── model.json (topology dan metadata)
+#   ├── group1-shard1of1.bin (weights)
+```
+
+#### 5. **Browser Requirements**
+
+**WebGL Support**: TensorFlow.js menggunakan WebGL untuk akselerasi GPU di browser
+
+```javascript
+// Check WebGL support
+console.log("WebGL supported:", tf.ENV.getBool("WEBGL_VERSION"));
+console.log("Backend:", tf.getBackend()); // Should be 'webgl'
+```
+
+**Minimum Browser Versions**:
+
+- Chrome 90+
+- Firefox 88+
+- Safari 14.1+
+- Edge 90+
+
+**Performance Optimization**:
+
+```javascript
+// Enable production mode
+tf.enableProdMode();
+
+// Use WebGL backend (default)
+await tf.setBackend("webgl");
+
+// Dispose tensors to prevent memory leaks
+tensor.dispose();
+prediction.dispose();
+```
+
+#### 6. **Common Errors dan Solutions**
+
+| Error                               | Penyebab                         | Solusi                               |
+| ----------------------------------- | -------------------------------- | ------------------------------------ |
+| `Layer does not have inbound_nodes` | Model saved dalam Keras 3 format | Re-save dengan `save_format='h5'`    |
+| `Weight mismatch`                   | Versi converter tidak match      | Gunakan tensorflowjs==4.22.0         |
+| `Cannot read property 'dataSync'`   | Browser tidak support WebGL      | Update browser atau gunakan polyfill |
+| `Model topology is malformed`       | Corrupt model.json               | Re-convert model dari .h5            |
+| `Out of memory`                     | Tensor tidak di-dispose          | Tambahkan `tensor.dispose()`         |
+
+#### 7. **Verification Checklist**
+
+✅ **Sebelum Deployment, Pastikan**:
+
+- [ ] TensorFlow 2.16.2 digunakan untuk training
+- [ ] Model disimpan dalam Legacy H5 format
+- [ ] TensorFlow.js 4.22.0 digunakan untuk conversion
+- [ ] model.json berisi `inbound_nodes` property
+- [ ] Input shape adalah `[null, 224, 224, 3]`
+- [ ] Weight files (.bin) ter-generate dengan benar
+- [ ] Test model loading di browser developer console
+- [ ] Test inference dengan sample image
+- [ ] Memory cleanup dengan tensor.dispose()
+
+#### 8. **Alternative: Graph Model**
+
+Jika masih ada masalah dengan Layers Model, gunakan Graph Model:
+
+```bash
+tensorflowjs_converter \
+  --input_format=keras \
+  --output_format=tfjs_graph_model \
+  model.h5 \
+  web_model_graph/
+```
+
+**Perbedaan dalam Code**:
+
+```javascript
+// Layers Model (recommended)
+const model = await tf.loadLayersModel("/web_model/model.json");
+const prediction = model.predict(tensor);
+
+// Graph Model (alternative)
+const model = await tf.loadGraphModel("/web_model_graph/model.json");
+const prediction = model.execute(tensor);
+```
+
+### Kesimpulan
+
+Penggunaan versi TensorFlow yang tepat bukan hanya rekomendasi, tetapi **requirement absolut** untuk deployment model CNN di browser. Versi TensorFlow 2.16.2 dan TensorFlow.js 4.22.0 telah diuji dan terbukti stabil untuk project ini. Menggunakan versi berbeda akan menyebabkan incompatibility issues yang sulit di-debug.
+
+---
+
+## ⚠️ 7. Kendala yang Dihadapi
 
 ### Kendala Teknis
 
@@ -461,7 +652,7 @@ Model telah diintegrasikan ke aplikasi web dan diuji dengan:
 
 ---
 
-## 🎓 7. Kesimpulan
+## 🎓 8. Kesimpulan
 
 ### Ringkasan Proyek
 
@@ -541,7 +732,7 @@ Sistem deteksi penyakit daun padi ini membuktikan bahwa teknologi Machine Learni
 
 ---
 
-## 🛠️ 8. Teknologi yang Digunakan
+## 🛠️ 9. Teknologi yang Digunakan
 
 ### Machine Learning & Data Science
 
@@ -668,32 +859,64 @@ Sistem deteksi penyakit daun padi ini membuktikan bahwa teknologi Machine Learni
 
 ### Dataset
 
-- Kaggle Rice Leaf Diseases Dataset: https://www.kaggle.com/datasets/vbookshelf/rice-leaf-diseases
+- **Rice Leaf Diseases Dataset**: [https://www.kaggle.com/datasets/vbookshelf/rice-leaf-diseases](https://www.kaggle.com/datasets/vbookshelf/rice-leaf-diseases)
+  - Publisher: vbookshelf
+  - Platform: Kaggle
+  - Classes: 3 (Bacterial Leaf Blight, Brown Spot, Leaf Smut)
+  - Format: RGB Images
 
-### Documentation
+### Source Code
 
-- TensorFlow: https://www.tensorflow.org/
-- TensorFlow.js: https://www.tensorflow.org/js
-- Next.js: https://nextjs.org/
-- React: https://react.dev/
-- Shadcn UI: https://ui.shadcn.com/
+- **GitHub Repository**: [https://github.com/kuraohikari/rice-leaf-disease-app](https://github.com/kuraohikari/rice-leaf-disease-app)
+  - Full source code
+  - Training notebook
+  - Web application code
+  - Documentation
+
+### Documentation & Frameworks
+
+- **TensorFlow**: [https://www.tensorflow.org/](https://www.tensorflow.org/)
+  - Official documentation
+  - API reference
+- **TensorFlow.js**: [https://www.tensorflow.org/js](https://www.tensorflow.org/js)
+  - Guide untuk model conversion
+  - Browser inference tutorials
+- **Next.js**: [https://nextjs.org/](https://nextjs.org/)
+  - App Router documentation
+  - API Routes guide
+- **React**: [https://react.dev/](https://react.dev/)
+  - Hooks documentation
+  - Best practices
+- **Shadcn UI**: [https://ui.shadcn.com/](https://ui.shadcn.com/)
+  - Component library
+  - Installation guide
+- **OpenRouter**: [https://openrouter.ai/](https://openrouter.ai/)
+  - API documentation
+  - Model selection guide
 
 ### Academic References
 
-- LeCun, Y., et al. (1998). "Gradient-based learning applied to document recognition"
-- He, K., et al. (2016). "Deep Residual Learning for Image Recognition"
-- Simonyan, K., & Zisserman, A. (2015). "Very Deep Convolutional Networks for Large-Scale Image Recognition"
+- LeCun, Y., Bottou, L., Bengio, Y., & Haffner, P. (1998). "Gradient-based learning applied to document recognition". Proceedings of the IEEE, 86(11), 2278-2324.
+- He, K., Zhang, X., Ren, S., & Sun, J. (2016). "Deep Residual Learning for Image Recognition". IEEE Conference on Computer Vision and Pattern Recognition (CVPR).
+- Simonyan, K., & Zisserman, A. (2015). "Very Deep Convolutional Networks for Large-Scale Image Recognition". International Conference on Learning Representations (ICLR).
+- Krizhevsky, A., Sutskever, I., & Hinton, G. E. (2012). "ImageNet Classification with Deep Convolutional Neural Networks". Advances in Neural Information Processing Systems (NIPS).
+
+### Related Papers on Agricultural AI
+
+- Mohanty, S. P., Hughes, D. P., & Salathé, M. (2016). "Using Deep Learning for Image-Based Plant Disease Detection". Frontiers in Plant Science, 7, 1419.
+- Ferentinos, K. P. (2018). "Deep learning models for plant disease detection and diagnosis". Computers and Electronics in Agriculture, 145, 311-318.
 
 ---
 
 ## 👨‍💻 Informasi Pengembang
 
-**Proyek UAS Machine Learning**  
-**Universitas**: Primakara University
-**Program Studi**: Informatika
-**Mata Kuliah**: Machine Learning  
-**Semester**: 7
-**Dosen Pengampu**: Ida Bagus Kresna Sudiatmika, S.Kom., M.T.
+**Proyek UAS Machine Learning**
+
+- **Universitas**: Primakara University
+- **Program Studi**: Informatika
+- **Mata Kuliah**: Machine Learning
+- **Semester**: 7
+- **Dosen Pengampu**: Ida Bagus Kresna Sudiatmika, S.Kom., M.T.
 
 **Pengembang**:
 

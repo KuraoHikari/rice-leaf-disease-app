@@ -1,0 +1,9 @@
+# https://www.robotstxt.org/robotstxt.html
+User-agent: *
+Allow: /
+
+# Disallow admin or private paths (if any)
+# Disallow: /admin/
+
+# Sitemap
+Sitemap: https://rice-leaf-disease-app.vercel.app/sitemap.xml
